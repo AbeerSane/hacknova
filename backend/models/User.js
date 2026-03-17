@@ -22,6 +22,18 @@ const userSchema = new mongoose.Schema({
  },
 
  city:String,
+ avatarDataUrl:String,
+ bio:String,
+ gender:String,
+ dateOfBirth:String,
+ address:String,
+ clinicName:String,
+ yearsExperience:Number,
+ licenseNumber:String,
+ doctorIdentityFile:String,
+ doctorIdentityFileName:String,
+ resetOtpHash:String,
+ resetOtpExpiresAt:Date,
 
  caregivers:[
  {

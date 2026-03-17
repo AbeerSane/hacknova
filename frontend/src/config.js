@@ -10,8 +10,20 @@ export async function apiRequest(path, options = {}) {
  });
 
  if (!response.ok) {
-  const errorBody = await response.json().catch(() => ({}));
-  throw new Error(errorBody.error || errorBody.message || "Request failed");
+    const contentType = response.headers.get("content-type") || "";
+    let errorMessage = "Request failed";
+
+    if (contentType.includes("application/json")) {
+     const errorBody = await response.json().catch(() => ({}));
+     errorMessage = errorBody.error || errorBody.message || errorMessage;
+    } else {
+     const errorText = await response.text().catch(() => "");
+     if (errorText && errorText.trim()) {
+        errorMessage = errorText.trim();
+     }
+    }
+
+    throw new Error(errorMessage);
  }
 
  return response.json();

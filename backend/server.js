@@ -20,7 +20,7 @@ const app = express()
 const port = process.env.PORT || 5000
 
 app.use(cors())
-app.use(bodyParser.json())
+app.use(bodyParser.json({ limit: "12mb" }))
 
 app.use("/api/users",userRoutes)
 app.use("/api/medications",medicationRoutes)

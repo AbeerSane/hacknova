@@ -19,7 +19,18 @@ export function AuthProvider({ children }) {
   localStorage.removeItem("healthapp_session");
  };
 
- const value = useMemo(() => ({ session, login, logout }), [session]);
+ const updateUser = (nextUser) => {
+  setSession((prev) => {
+   if (!prev) {
+    return prev;
+   }
+   const next = { ...prev, user: { ...prev.user, ...nextUser } };
+   localStorage.setItem("healthapp_session", JSON.stringify(next));
+   return next;
+  });
+ };
+
+ const value = useMemo(() => ({ session, login, logout, updateUser }), [session]);
 
  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

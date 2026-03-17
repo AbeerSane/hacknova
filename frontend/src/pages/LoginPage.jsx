@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { apiRequest } from "../config";
 import { useAuth } from "../context/AuthContext";
 
@@ -10,16 +10,65 @@ const initialRegister = {
  role: "patient",
  phone: "",
  specialization: "",
- city: ""
+ city: "",
+ doctorIdentityFile: "",
+ doctorIdentityFileName: ""
+};
+
+const initialForgot = {
+ email: "",
+ otp: "",
+ newPassword: "",
+ confirmPassword: ""
 };
 
 export default function LoginPage() {
  const navigate = useNavigate();
- const { login } = useAuth();
+ const [searchParams] = useSearchParams();
+ const { login, session } = useAuth();
  const [mode, setMode] = useState("login");
  const [loginForm, setLoginForm] = useState({ email: "", password: "" });
  const [registerForm, setRegisterForm] = useState(initialRegister);
+ const [forgotForm, setForgotForm] = useState(initialForgot);
+ const [otpRequested, setOtpRequested] = useState(false);
  const [status, setStatus] = useState("");
+
+ const handleIdentityUpload = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) {
+   setRegisterForm((prev) => ({ ...prev, doctorIdentityFile: "", doctorIdentityFileName: "" }));
+   return;
+  }
+
+  if (file.size > 2 * 1024 * 1024) {
+   setStatus("Identity file must be under 2MB");
+   return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+   setRegisterForm((prev) => ({
+    ...prev,
+    doctorIdentityFile: String(reader.result || ""),
+    doctorIdentityFileName: file.name
+   }));
+  };
+  reader.readAsDataURL(file);
+ };
+
+ useEffect(() => {
+  const requestedMode = searchParams.get("mode");
+  if (requestedMode === "register" || requestedMode === "login") {
+   setMode(requestedMode);
+  }
+  if (requestedMode === "forgot") {
+   setMode("forgot");
+  }
+ }, [searchParams]);
+
+ if (session?.user) {
+  return <Navigate to={session.user.role === "doctor" ? "/doctor" : "/patient"} replace />;
+ }
 
  const submitLogin = async (event) => {
   event.preventDefault();
@@ -43,6 +92,11 @@ export default function LoginPage() {
   event.preventDefault();
   setStatus("Creating account...");
 
+    if (registerForm.role === "doctor" && !registerForm.doctorIdentityFile) {
+     setStatus("Doctor identity document is mandatory");
+     return;
+    }
+
   try {
    await apiRequest("/users/register", {
     method: "POST",
@@ -52,6 +106,55 @@ export default function LoginPage() {
    setStatus("Account created. Please login.");
    setLoginForm({ email: registerForm.email, password: "" });
    setRegisterForm(initialRegister);
+  } catch (error) {
+   setStatus(error.message);
+  }
+ };
+
+ const requestResetOtp = async (event) => {
+  event.preventDefault();
+  setStatus("Sending OTP...");
+
+  try {
+   const response = await apiRequest("/users/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email: forgotForm.email })
+   });
+   setOtpRequested(true);
+   setStatus(response.message || "OTP sent to your email");
+  } catch (error) {
+   setStatus(error.message);
+  }
+ };
+
+ const submitForgotReset = async (event) => {
+  event.preventDefault();
+
+  if (!forgotForm.otp) {
+   setStatus("Enter the OTP sent to your email");
+   return;
+  }
+
+  if (forgotForm.newPassword !== forgotForm.confirmPassword) {
+   setStatus("New password and confirm password must match");
+   return;
+  }
+
+  setStatus("Resetting password...");
+  try {
+   const response = await apiRequest("/users/reset-password", {
+    method: "POST",
+    body: JSON.stringify({
+     email: forgotForm.email,
+     otp: forgotForm.otp,
+     newPassword: forgotForm.newPassword
+    })
+   });
+   setStatus(response.message || "Password reset successful. Please login.");
+   setMode("login");
+   setOtpRequested(false);
+   setLoginForm((prev) => ({ ...prev, email: forgotForm.email }));
+   setForgotForm(initialForgot);
   } catch (error) {
    setStatus(error.message);
   }
@@ -89,7 +192,7 @@ export default function LoginPage() {
       <button className={`login-tab ${mode === "register" ? "active" : ""}`} onClick={() => setMode("register")}>Register</button>
      </div>
 
-     {mode === "login" ? (
+    {mode === "login" ? (
       <form className="space-y-4" onSubmit={submitLogin}>
        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
        <input
@@ -109,9 +212,10 @@ export default function LoginPage() {
         onChange={(event) => setLoginForm((prev) => ({ ...prev, password: event.target.value }))}
         required
        />
+         <button type="button" className="text-xs text-teal-700 underline underline-offset-4" onClick={() => setMode("forgot")}>Forgot password?</button>
        <button type="submit" className="submit-btn w-full login-submit">Sign In Securely</button>
       </form>
-     ) : (
+       ) : mode === "register" ? (
       <form className="space-y-4" onSubmit={submitRegister}>
        <input className="form-input login-input" placeholder="Full Name" value={registerForm.name} onChange={(event) => setRegisterForm((prev) => ({ ...prev, name: event.target.value }))} required />
        <input className="form-input login-input" type="email" placeholder="Email" value={registerForm.email} onChange={(event) => setRegisterForm((prev) => ({ ...prev, email: event.target.value }))} required />
@@ -122,11 +226,59 @@ export default function LoginPage() {
         <option value="doctor">Doctor</option>
        </select>
        {registerForm.role === "doctor" ? (
-        <input className="form-input login-input" placeholder="Specialization" value={registerForm.specialization} onChange={(event) => setRegisterForm((prev) => ({ ...prev, specialization: event.target.value }))} />
+            <>
+             <input className="form-input login-input" placeholder="Specialization" value={registerForm.specialization} onChange={(event) => setRegisterForm((prev) => ({ ...prev, specialization: event.target.value }))} required />
+             <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Doctor Identity Document (Mandatory)</label>
+             <input className="form-input login-input" type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleIdentityUpload} required />
+             {registerForm.doctorIdentityFileName ? <p className="text-xs text-slate-500">Uploaded: {registerForm.doctorIdentityFileName}</p> : null}
+            </>
        ) : null}
        <input className="form-input login-input" placeholder="City (e.g. Mumbai, Delhi)" value={registerForm.city} onChange={(event) => setRegisterForm((prev) => ({ ...prev, city: event.target.value }))} />
        <button type="submit" className="submit-btn w-full login-submit">Create Account</button>
       </form>
+      ) : (
+       <form className="space-y-4" onSubmit={otpRequested ? submitForgotReset : requestResetOtp}>
+        <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Email</label>
+        <input
+         className="form-input login-input"
+         type="email"
+         placeholder="Registered email"
+         value={forgotForm.email}
+         onChange={(event) => setForgotForm((prev) => ({ ...prev, email: event.target.value }))}
+         required
+        />
+        {otpRequested ? (
+         <>
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">OTP</label>
+          <input
+        className="form-input login-input"
+        placeholder="6-digit OTP"
+        value={forgotForm.otp}
+        onChange={(event) => setForgotForm((prev) => ({ ...prev, otp: event.target.value }))}
+        required
+          />
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">New Password</label>
+          <input
+        className="form-input login-input"
+        type="password"
+        placeholder="New password"
+        value={forgotForm.newPassword}
+        onChange={(event) => setForgotForm((prev) => ({ ...prev, newPassword: event.target.value }))}
+        required
+          />
+          <label className="text-xs font-semibold uppercase tracking-wide text-slate-500">Confirm Password</label>
+          <input
+        className="form-input login-input"
+        type="password"
+        placeholder="Confirm new password"
+        value={forgotForm.confirmPassword}
+        onChange={(event) => setForgotForm((prev) => ({ ...prev, confirmPassword: event.target.value }))}
+        required
+          />
+         </>
+        ) : null}
+        <button type="submit" className="submit-btn w-full login-submit">{otpRequested ? "Verify OTP & Reset Password" : "Send OTP"}</button>
+       </form>
      )}
 
      {status ? <p className="text-sm mt-4 login-status">{status}</p> : null}

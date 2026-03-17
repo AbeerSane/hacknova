@@ -9,11 +9,14 @@ const appointmentSchema = new mongoose.Schema({
  hospital:String,
  date:String,
  time:String,
+ preferredDate:String,
+ preferredTime:String,
  notes:String,
+ decisionNote:String,
  token:String,
  status:{
   type:String,
-  enum:["pending","scheduled","completed","cancelled"],
+  enum:["pending","scheduled","completed","cancelled","rejected"],
   default:"scheduled"
  }
 

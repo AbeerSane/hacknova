@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../config";
 import CountUp from "../components/CountUp";
+import { useAuth } from "../context/AuthContext";
 
 const features = [
  { icon: "fa-pills", title: "Medication Reminders", text: "Smart scheduling, dosage instructions, and adaptive alerts." },
@@ -13,12 +14,16 @@ const features = [
 ];
 
 export default function LandingPage() {
+ const { session, logout } = useAuth();
  const [showChat, setShowChat] = useState(false);
  const [messages, setMessages] = useState([
   { text: "Hi! I'm HealthApp's AI assistant. How can I help you today?", sender: "bot" }
  ]);
  const [input, setInput] = useState("");
  const [loading, setLoading] = useState(false);
+ const dashboardPath = session?.user?.role === "doctor" ? "/doctor" : "/patient";
+ const profilePath = `${dashboardPath}?tab=profile`;
+ const enterPath = session?.user ? dashboardPath : "/login";
 
  const sendMessage = async () => {
   if (!input.trim()) return;
@@ -55,6 +60,25 @@ export default function LandingPage() {
       <li className="nav-item"><a className="nav-link" href="#features">Features</a></li>
       <li className="nav-item"><Link className="nav-link" to="/contact">Contact</Link></li>
      </ul>
+     <div className="landing-nav-actions">
+      {session?.user ? (
+       <>
+        <Link className="landing-nav-profile" to={profilePath} aria-label="Open dashboard profile">
+         <i className="fa-solid fa-user"></i>
+         <span>{session.user.name}</span>
+        </Link>
+        <button className="landing-nav-chip landing-nav-logout" type="button" onClick={logout}>
+         <i className="fa-solid fa-right-from-bracket"></i>
+         Logout
+        </button>
+       </>
+      ) : (
+       <>
+        <Link className="landing-nav-chip" to="/login">Login</Link>
+        <Link className="landing-nav-primary" to="/login?mode=register">Sign Up</Link>
+       </>
+      )}
+     </div>
     </div>
    </nav>
 
@@ -69,7 +93,7 @@ export default function LandingPage() {
        <p className="mt-3 fs-5 text-gray-200 hero-lead">
         A full-stack platform for digital patient care, remote doctor monitoring, and emergency health alerts.
        </p>
-       <Link to="/login" className="btn btn-light btn-lg mt-3 hero-cta">Enter HealthApp</Link>
+      <Link to={enterPath} className="btn btn-light btn-lg mt-3 hero-cta">{session?.user ? "Go to Dashboard" : "Enter HealthApp"}</Link>
       </div>
         <div className="col-lg-6 col-md-12 mt-4 mt-lg-0 reveal-up reveal-delay-2">
        <div className="hero-insight-wrap">

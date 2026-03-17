@@ -28,7 +28,7 @@ router.patch("/:id/read", async (req, res) => {
   const notification = await Notification.findByIdAndUpdate(
    req.params.id,
    { isRead: true },
-   { new: true }
+    { returnDocument: "after" }
   );
 
   if (!notification) {

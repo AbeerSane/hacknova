@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import jsPDF from "jspdf";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../config";
 import CountUp from "../components/CountUp";
@@ -18,7 +19,9 @@ const sidebarItems = [
 ];
 
 export default function PatientDashboard() {
- const { session, logout } = useAuth();
+ const { session, logout, updateUser } = useAuth();
+ const [searchParams] = useSearchParams();
+ const navigate = useNavigate();
  const user = session.user;
  const todayISO = new Date().toISOString().slice(0, 10);
  const [vitals, setVitals] = useState([]);
@@ -26,7 +29,7 @@ export default function PatientDashboard() {
  const [appointments, setAppointments] = useState([]);
  const [notifications, setNotifications] = useState([]);
  const [status, setStatus] = useState("");
- const [activeTab, setActiveTab] = useState("overview");
+ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "overview");
  const [doctors, setDoctors] = useState([]);
  const [vitalForm, setVitalForm] = useState({ heartRate: "", bloodPressure: "", spo2: "", temperature: "" });
  const [medForm, setMedForm] = useState({ medicineName: "", dosage: "", date: todayISO, time: "" });
@@ -34,10 +37,29 @@ export default function PatientDashboard() {
  const [calendarMonth, setCalendarMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
  const [emergencyMessage, setEmergencyMessage] = useState("");
  const [emergencyPriority, setEmergencyPriority] = useState("high");
+ const [consultPreference, setConsultPreference] = useState(() => {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return {
+   preferredDate: tomorrow.toISOString().slice(0, 10),
+   preferredTime: "11:00",
+   notes: "Patient-selected consultation"
+  };
+ });
  const [contactForm, setContactForm] = useState({
   name: user.name || "",
   email: user.email || "",
   message: ""
+ });
+ const [profileForm, setProfileForm] = useState({
+  name: user.name || "",
+  phone: user.phone || "",
+  city: user.city || "",
+  gender: user.gender || "",
+  dateOfBirth: user.dateOfBirth || "",
+  address: user.address || "",
+  bio: user.bio || "",
+  avatarDataUrl: user.avatarDataUrl || ""
  });
 
  const latestVital = useMemo(() => (vitals.length ? vitals[vitals.length - 1] : null), [vitals]);
@@ -145,6 +167,57 @@ useEffect(() => {
 
  return () => clearInterval(interval);
 }, []);
+
+ useEffect(() => {
+  const tab = searchParams.get("tab");
+  if (tab && sidebarItems.some((item) => item.id === tab)) {
+   setActiveTab(tab);
+  }
+ }, [searchParams]);
+
+ useEffect(() => {
+  setProfileForm({
+   name: user.name || "",
+   phone: user.phone || "",
+   city: user.city || "",
+   gender: user.gender || "",
+   dateOfBirth: user.dateOfBirth || "",
+   address: user.address || "",
+   bio: user.bio || "",
+   avatarDataUrl: user.avatarDataUrl || ""
+  });
+ }, [user]);
+
+ const handleProfileAvatarChange = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) {
+   return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+   setProfileForm((prev) => ({ ...prev, avatarDataUrl: String(reader.result || "") }));
+  };
+  reader.readAsDataURL(file);
+ };
+
+ const saveProfile = async (event) => {
+  event.preventDefault();
+  setStatus("Saving profile...");
+
+  try {
+   const response = await apiRequest(`/users/${user.id}/profile`, {
+    method: "PUT",
+    body: JSON.stringify(profileForm)
+   });
+
+   updateUser(response.user);
+   setStatus("Profile updated successfully");
+   navigate("/");
+  } catch (error) {
+   setStatus(error.message);
+  }
+ };
 
  const saveVital = async (event) => {
   event.preventDefault();
@@ -309,10 +382,16 @@ useEffect(() => {
   try {
     const response = await apiRequest("/appointments/request-consultation", {
     method: "POST",
-    body: JSON.stringify({ patientId: user.id, doctorId: selectedDoctorId, notes: "Patient-selected consultation" })
+      body: JSON.stringify({
+         patientId: user.id,
+         doctorId: selectedDoctorId,
+         notes: consultPreference.notes,
+         preferredDate: consultPreference.preferredDate,
+         preferredTime: consultPreference.preferredTime
+      })
    });
    await loadData();
-    setStatus(`Consultation scheduled with Dr. ${response?.doctor?.name || "Assigned Doctor"}. Token: ${response?.appointment?.token || "NA"}`);
+      setStatus(`Request sent to Dr. ${response?.doctor?.name || "Assigned Doctor"} for ${consultPreference.preferredDate} ${consultPreference.preferredTime}. Waiting for approval.`);
     setActiveTab("appointments");
   } catch (error) {
    setStatus(error.message);
@@ -322,10 +401,16 @@ useEffect(() => {
  return (
   <div className="min-h-screen bg-slate-100 p-4 md:p-8 dashboard-shell">
      <header className="bg-white rounded-2xl shadow p-4 mb-6 flex items-center justify-between dashboard-topbar">
-        <div>
+        <div className="dashboard-header-brand">
+       <Link to="/" className="dashboard-brand-link">
+        <span className="dashboard-brand-mark">H+</span>
+        <span>HealthApp Care+</span>
+       </Link>
+        </div>
+        <div className="dashboard-header-center">
          <p className="text-sm text-gray-500">Patient Dashboard</p>
          <h1 className="text-xl font-semibold">Welcome, {user.name}</h1>
-         <div className="flex flex-wrap items-center gap-2 mt-2">
+         <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
           <span className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800 border border-teal-100">
            <i className="fa-solid fa-capsules"></i>
            Medicines Allocated: {allocatedMedicationStats.totalAllocated}
@@ -336,10 +421,15 @@ useEffect(() => {
           </span>
          </div>
         </div>
-        <div className="flex items-center gap-3">
-         <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-700" aria-hidden="true">
+      <div className="flex items-center gap-3 dashboard-header-actions">
+         <button
+          type="button"
+          className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 dashboard-profile-trigger"
+          aria-label="Open profile settings"
+          onClick={() => setActiveTab("profile")}
+         >
             <i className="fa-solid fa-user"></i>
-         </div>
+         </button>
          <button className="submit-btn" onClick={logout}>Logout</button>
         </div>
      </header>
@@ -491,8 +581,10 @@ useEffect(() => {
                 <div key={item._id} className="bg-slate-50 rounded-lg p-3 text-sm">
                  <p><strong>Doctor:</strong> {item.doctor || "Pending"}</p>
                  <p><strong>Date:</strong> {item.date} {item.time || ""}</p>
+                         {item.preferredDate || item.preferredTime ? <p><strong>Preferred:</strong> {item.preferredDate || "--"} {item.preferredTime || ""}</p> : null}
                  <p><strong>Token:</strong> {item.token || "NA"}</p>
                  <p><strong>Status:</strong> {item.status}</p>
+                         {item.decisionNote ? <p><strong>Doctor Note:</strong> {item.decisionNote}</p> : null}
                 </div>
                )) : <p className="text-sm text-gray-500">No appointments yet</p>}
               </div>
@@ -500,6 +592,26 @@ useEffect(() => {
              <div>
               <h3 className="text-md font-semibold mb-1">Request New Consultation</h3>
               <p className="text-sm text-gray-500 mb-3">Select a doctor. Doctors in your city have a <span className="text-teal-700 font-medium">Near You</span> badge.</p>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                      <input
+                        className="form-input"
+                        type="date"
+                        value={consultPreference.preferredDate}
+                        onChange={(event) => setConsultPreference((prev) => ({ ...prev, preferredDate: event.target.value }))}
+                      />
+                      <input
+                        className="form-input"
+                        type="time"
+                        value={consultPreference.preferredTime}
+                        onChange={(event) => setConsultPreference((prev) => ({ ...prev, preferredTime: event.target.value }))}
+                      />
+                      <input
+                        className="form-input"
+                        placeholder="Optional note for doctor"
+                        value={consultPreference.notes}
+                        onChange={(event) => setConsultPreference((prev) => ({ ...prev, notes: event.target.value }))}
+                      />
+                     </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                {[...doctors].sort((a, b) => {
                 const aLocal = user.city && a.city && a.city.toLowerCase() === user.city.toLowerCase();
@@ -593,11 +705,38 @@ useEffect(() => {
          {activeTab === "profile" ? (
             <section id="profile-panel" role="tabpanel" aria-labelledby="profile-tab" className="bg-white rounded-2xl shadow p-6">
              <h2 className="text-lg font-semibold mb-3">Profile Settings</h2>
-             <div className="text-sm space-y-2">
-                <p><strong>Name:</strong> {user.name}</p>
-                <p><strong>Email:</strong> {user.email}</p>
-                <p><strong>Role:</strong> {user.role}</p>
-             </div>
+             <form className="space-y-4" onSubmit={saveProfile}>
+              <div className="flex items-center gap-4">
+               <div className="w-16 h-16 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center">
+                {profileForm.avatarDataUrl ? <img src={profileForm.avatarDataUrl} alt="Profile" className="w-full h-full object-cover" /> : <i className="fa-solid fa-user text-slate-500"></i>}
+               </div>
+               <div>
+                <p className="text-xs text-gray-500 mb-1">Display Picture</p>
+                <input className="form-input" type="file" accept="image/*" onChange={handleProfileAvatarChange} />
+               </div>
+              </div>
+              <input className="form-input" placeholder="Full Name" value={profileForm.name} onChange={(event) => setProfileForm((prev) => ({ ...prev, name: event.target.value }))} required />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+               <input className="form-input" placeholder="Phone" value={profileForm.phone} onChange={(event) => setProfileForm((prev) => ({ ...prev, phone: event.target.value }))} />
+               <input className="form-input" placeholder="City" value={profileForm.city} onChange={(event) => setProfileForm((prev) => ({ ...prev, city: event.target.value }))} />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+               <select className="form-input" value={profileForm.gender} onChange={(event) => setProfileForm((prev) => ({ ...prev, gender: event.target.value }))}>
+                <option value="">Select Gender</option>
+                <option value="female">Female</option>
+                <option value="male">Male</option>
+                <option value="other">Other</option>
+               </select>
+               <input className="form-input" type="date" value={profileForm.dateOfBirth} onChange={(event) => setProfileForm((prev) => ({ ...prev, dateOfBirth: event.target.value }))} />
+              </div>
+              <input className="form-input" placeholder="Address" value={profileForm.address} onChange={(event) => setProfileForm((prev) => ({ ...prev, address: event.target.value }))} />
+              <textarea className="form-input" rows="3" placeholder="About me / health notes" value={profileForm.bio} onChange={(event) => setProfileForm((prev) => ({ ...prev, bio: event.target.value }))}></textarea>
+              <div className="text-sm space-y-1 text-slate-600">
+               <p><strong>Email:</strong> {user.email}</p>
+               <p><strong>Role:</strong> {user.role}</p>
+              </div>
+              <button className="submit-btn" type="submit">Save Profile</button>
+             </form>
             </section>
          ) : null}
 

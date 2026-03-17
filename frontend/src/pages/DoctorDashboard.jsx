@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import jsPDF from "jspdf";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../config";
 import CountUp from "../components/CountUp";
@@ -19,7 +20,9 @@ const sections = [
 ];
 
 export default function DoctorDashboard() {
- const { session, logout } = useAuth();
+ const { session, logout, updateUser } = useAuth();
+ const [searchParams] = useSearchParams();
+ const navigate = useNavigate();
  const user = session.user;
  const [appointments, setAppointments] = useState([]);
  const [patients, setPatients] = useState([]);
@@ -27,7 +30,7 @@ export default function DoctorDashboard() {
  const [patientId, setPatientId] = useState("");
  const [patientVitals, setPatientVitals] = useState([]);
  const [status, setStatus] = useState("");
- const [activeTab, setActiveTab] = useState("overview");
+ const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "overview");
  const [recommendationForm, setRecommendationForm] = useState({
   patientId: "",
   medicineName: "",
@@ -41,6 +44,19 @@ export default function DoctorDashboard() {
  const [recommendations, setRecommendations] = useState([]);
  const [contactForm, setContactForm] = useState({ name: user.name || "", email: user.email || "", message: "" });
  const [reports, setReports] = useState([]);
+ const [calendarMonth, setCalendarMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+ const [selectedAppointmentDate, setSelectedAppointmentDate] = useState(new Date().toISOString().slice(0, 10));
+ const [profileForm, setProfileForm] = useState({
+  name: user.name || "",
+  phone: user.phone || "",
+  city: user.city || "",
+  specialization: user.specialization || "",
+  clinicName: user.clinicName || "",
+  yearsExperience: user.yearsExperience || "",
+  licenseNumber: user.licenseNumber || "",
+  bio: user.bio || "",
+  avatarDataUrl: user.avatarDataUrl || ""
+ });
 
  const loadData = async () => {
   try {
@@ -74,6 +90,27 @@ export default function DoctorDashboard() {
   return () => clearInterval(interval);
  }, []);
 
+ useEffect(() => {
+  const tab = searchParams.get("tab");
+  if (tab && sections.some((item) => item.id === tab)) {
+   setActiveTab(tab);
+  }
+ }, [searchParams]);
+
+ useEffect(() => {
+  setProfileForm({
+   name: user.name || "",
+   phone: user.phone || "",
+   city: user.city || "",
+   specialization: user.specialization || "",
+   clinicName: user.clinicName || "",
+   yearsExperience: user.yearsExperience || "",
+   licenseNumber: user.licenseNumber || "",
+   bio: user.bio || "",
+   avatarDataUrl: user.avatarDataUrl || ""
+  });
+ }, [user]);
+
  const appointmentStatusItems = useMemo(() => {
   const scheduled = appointments.filter((item) => item.status === "scheduled").length;
   const completed = appointments.filter((item) => item.status === "completed").length;
@@ -85,6 +122,89 @@ export default function DoctorDashboard() {
    { label: "Cancelled", value: cancelled, color: "#dc2626" }
   ];
  }, [appointments]);
+
+ const appointmentsByDate = useMemo(() => {
+  return appointments.reduce((acc, item) => {
+   const key = item.date;
+   if (!key) {
+    return acc;
+   }
+   if (!acc[key]) {
+    acc[key] = [];
+   }
+   acc[key].push(item);
+   return acc;
+  }, {});
+ }, [appointments]);
+
+ const appointmentStatusByDate = useMemo(() => {
+  return appointments.reduce((acc, item) => {
+   const key = item.date;
+   if (!key) {
+    return acc;
+   }
+   if (!acc[key]) {
+    acc[key] = { pending: 0, scheduled: 0, completed: 0, cancelled: 0, rejected: 0 };
+   }
+   const statusKey = ["pending", "scheduled", "completed", "cancelled", "rejected"].includes(item.status) ? item.status : "scheduled";
+   acc[key][statusKey] += 1;
+   return acc;
+  }, {});
+ }, [appointments]);
+
+ const selectedDateAppointments = useMemo(() => appointmentsByDate[selectedAppointmentDate] || [], [appointmentsByDate, selectedAppointmentDate]);
+
+ const selectedDateStatusItems = useMemo(() => {
+  const stats = appointmentStatusByDate[selectedAppointmentDate] || { pending: 0, scheduled: 0, completed: 0, cancelled: 0, rejected: 0 };
+  return [
+   { label: "Pending", value: stats.pending, color: "#d97706" },
+   { label: "Scheduled", value: stats.scheduled, color: "#2563eb" },
+   { label: "Completed", value: stats.completed, color: "#059669" },
+   { label: "Closed", value: stats.cancelled + stats.rejected, color: "#6b7280" }
+  ];
+ }, [appointmentStatusByDate, selectedAppointmentDate]);
+
+ const upcomingSevenDayLoad = useMemo(() => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, index) => {
+   const day = new Date(today);
+   day.setDate(today.getDate() + index);
+   const key = day.toISOString().slice(0, 10);
+   return (appointmentsByDate[key] || []).length;
+  });
+ }, [appointmentsByDate]);
+
+ const appointmentCalendarCells = useMemo(() => {
+  const year = calendarMonth.getFullYear();
+  const month = calendarMonth.getMonth();
+  const firstDay = new Date(year, month, 1);
+  const firstWeekday = firstDay.getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const cells = [];
+
+  for (let i = 0; i < firstWeekday; i += 1) {
+   cells.push(null);
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+   const dateStr = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+    const status = appointmentStatusByDate[dateStr] || { pending: 0, scheduled: 0, completed: 0, cancelled: 0, rejected: 0 };
+    let dominantStatus = "none";
+    if (status.pending > 0) {
+     dominantStatus = "pending";
+    } else if (status.scheduled > 0) {
+     dominantStatus = "scheduled";
+    } else if (status.completed > 0) {
+     dominantStatus = "completed";
+    } else if (status.cancelled > 0 || status.rejected > 0) {
+     dominantStatus = "closed";
+    }
+    cells.push({ day, dateStr, count: (appointmentsByDate[dateStr] || []).length, dominantStatus });
+  }
+
+  return cells;
+ }, [calendarMonth, appointmentsByDate, appointmentStatusByDate]);
 
  const recentAlertTrend = useMemo(() => {
   const now = Date.now();
@@ -182,6 +302,21 @@ export default function DoctorDashboard() {
   }
  };
 
+ const respondToConsultation = async (appointmentId, action) => {
+  setStatus(action === "approve" ? "Approving consultation..." : "Rejecting consultation...");
+
+  try {
+   await apiRequest(`/appointments/doctor/${user.id}/appointments/${appointmentId}/respond`, {
+    method: "PATCH",
+    body: JSON.stringify({ action })
+   });
+   await loadData();
+   setStatus(action === "approve" ? "Consultation approved and patient notified on WhatsApp" : "Consultation rejected and patient notified on WhatsApp");
+  } catch (error) {
+   setStatus(error.message);
+  }
+ };
+
  const downloadReportPDF = (report) => {
   const doc = new jsPDF();
 
@@ -222,17 +357,62 @@ export default function DoctorDashboard() {
   doc.save(fileName);
  };
 
+ const handleProfileAvatarChange = (event) => {
+  const file = event.target.files?.[0];
+  if (!file) {
+   return;
+  }
+
+  const reader = new FileReader();
+  reader.onload = () => {
+   setProfileForm((prev) => ({ ...prev, avatarDataUrl: String(reader.result || "") }));
+  };
+  reader.readAsDataURL(file);
+ };
+
+ const saveProfile = async (event) => {
+  event.preventDefault();
+  setStatus("Saving profile...");
+
+  try {
+   const response = await apiRequest(`/users/${user.id}/profile`, {
+    method: "PUT",
+    body: JSON.stringify({
+     ...profileForm,
+     yearsExperience: profileForm.yearsExperience ? Number(profileForm.yearsExperience) : 0
+    })
+   });
+
+   updateUser(response.user);
+    setStatus("Profile updated successfully");
+    navigate("/");
+  } catch (error) {
+   setStatus(error.message);
+  }
+ };
+
  return (
    <div className="min-h-screen bg-slate-100 p-4 md:p-8 dashboard-shell">
     <header className="bg-white rounded-2xl shadow p-4 mb-6 flex items-center justify-between dashboard-topbar">
-    <div>
+      <div className="dashboard-header-brand">
+       <Link to="/" className="dashboard-brand-link">
+        <span className="dashboard-brand-mark">H+</span>
+        <span>HealthApp Care+</span>
+       </Link>
+      </div>
+      <div className="dashboard-header-center">
      <p className="text-sm text-gray-500">Doctor Dashboard</p>
      <h1 className="text-xl font-semibold">Welcome, Dr. {user.name}</h1>
     </div>
-    <div className="flex items-center gap-3">
-     <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-700" aria-hidden="true">
+    <div className="flex items-center gap-3 dashboard-header-actions">
+      <button
+       type="button"
+       className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center text-slate-700 dashboard-profile-trigger"
+       aria-label="Open doctor profile"
+       onClick={() => setActiveTab("profile")}
+      >
       <i className="fa-solid fa-user-doctor"></i>
-     </div>
+      </button>
      <button className="submit-btn" onClick={logout}>Logout</button>
     </div>
    </header>
@@ -267,7 +447,7 @@ export default function DoctorDashboard() {
        <h2 className="text-3xl font-semibold mb-3">Dashboard Overview</h2>
        <div className="grid grid-cols-3 gap-4">
          <div className="bg-slate-50 rounded-xl p-4"><p className="text-xs text-gray-500">Assigned Patients</p><p className="text-2xl font-bold text-teal-600"><CountUp to={patients.length} duration={1.8} /></p></div>
-         <div className="bg-slate-50 rounded-xl p-4"><p className="text-xs text-gray-500">Pending Consultations</p><p className="text-2xl font-bold text-blue-600"><CountUp to={appointments.filter((item) => item.status === "scheduled").length} duration={1.8} /></p></div>
+         <div className="bg-slate-50 rounded-xl p-4"><p className="text-xs text-gray-500">Pending Consultations</p><p className="text-2xl font-bold text-blue-600"><CountUp to={appointments.filter((item) => item.status === "pending").length} duration={1.8} /></p></div>
          <div className="bg-slate-50 rounded-xl p-4"><p className="text-xs text-gray-500">Emergency Alerts</p><p className="text-2xl font-bold text-red-600"><CountUp to={notifications.filter((item) => item.type === "vital-alert" || item.type === "emergency").length} duration={1.8} /></p></div>
        </div>
        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5">
@@ -286,12 +466,23 @@ export default function DoctorDashboard() {
      {activeTab === "patients" ? (
       <section id="patients-panel" role="tabpanel" aria-labelledby="patients-tab" className="bg-white rounded-2xl shadow p-6">
        <h2 className="text-lg font-semibold mb-3">Assigned Patients</h2>
+       <p className="text-xs text-slate-500 mb-3">Auto-sorted: Critical patients first, then most recently active.</p>
        <div className="space-y-3 max-h-80 overflow-y-auto">
         {patients.length ? patients.map((item) => (
          <div key={item._id} className="bg-slate-50 rounded-lg p-3 text-sm">
+         <div className="flex items-center justify-between gap-2">
           <p className="font-semibold">{item.name}</p>
+          {item.isCritical ? (
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold border border-red-200">Critical</span>
+          ) : (
+          <span className="text-[11px] px-2 py-0.5 rounded-full bg-teal-100 text-teal-700 font-semibold border border-teal-200">Stable</span>
+          )}
+         </div>
           <p>{item.email}</p>
           <p>{item.phone || "No phone"}</p>
+         {item.city ? <p>{item.city}</p> : null}
+         {item.recentActivityAt ? <p className="text-xs text-gray-500 mt-1">Recent activity: {new Date(item.recentActivityAt).toLocaleString()}</p> : null}
+         {item.isCritical && item.criticalReason?.length ? <p className="text-xs text-red-700 mt-1">Reason: {item.criticalReason.join(", ")}</p> : null}
           <p className="text-xs text-gray-500 mt-1">ID: {item._id}</p>
          </div>
         )) : <p className="text-sm text-gray-500">No assigned patients yet</p>}
@@ -346,15 +537,104 @@ export default function DoctorDashboard() {
      {activeTab === "appointments" ? (
       <section id="appointments-panel" role="tabpanel" aria-labelledby="appointments-tab" className="bg-white rounded-2xl shadow p-6">
        <h2 className="text-lg font-semibold mb-3">Appointments</h2>
+         <p className="text-xs text-slate-500 mb-3">Pending requests are shown first. Approve/reject will trigger WhatsApp notifications.</p>
+       <div className="bg-slate-50 rounded-xl p-4 mb-4">
+        <div className="flex items-center justify-between mb-3">
+         <button
+          className="text-sm px-2 py-1 rounded bg-white border"
+          onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))}
+         >
+          Previous
+         </button>
+         <p className="font-semibold">
+          {calendarMonth.toLocaleString("default", { month: "long", year: "numeric" })}
+         </p>
+         <button
+          className="text-sm px-2 py-1 rounded bg-white border"
+          onClick={() => setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))}
+         >
+          Next
+         </button>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1 text-xs text-center font-medium text-gray-500 mb-2">
+         <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+        </div>
+
+        <div className="grid grid-cols-7 gap-1">
+         {appointmentCalendarCells.map((cell, index) => {
+          if (!cell) {
+           return <div key={`empty-appt-${index}`} className="h-14"></div>;
+          }
+
+          const isSelected = selectedAppointmentDate === cell.dateStr;
+          const hasAppts = cell.count > 0;
+          const statusColorClass =
+           cell.dominantStatus === "pending"
+          ? "bg-amber-50 border-amber-200 text-amber-800"
+          : cell.dominantStatus === "scheduled"
+           ? "bg-blue-50 border-blue-200 text-blue-800"
+           : cell.dominantStatus === "completed"
+            ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+            : cell.dominantStatus === "closed"
+             ? "bg-slate-100 border-slate-300 text-slate-600"
+             : "bg-white border-slate-200 text-gray-700";
+
+          return (
+           <button
+            key={cell.dateStr}
+            onClick={() => setSelectedAppointmentDate(cell.dateStr)}
+          className={`h-14 rounded text-sm flex flex-col items-center justify-center border ${isSelected ? "bg-teal-600 text-white border-teal-600" : statusColorClass}`}
+           >
+            <span>{cell.day}</span>
+            {hasAppts ? <span className={`text-[10px] px-1 rounded-full ${isSelected ? "bg-white text-teal-700" : "bg-teal-100 text-teal-700"}`}>{cell.count}</span> : null}
+           </button>
+          );
+         })}
+        </div>
+        <div className="flex flex-wrap gap-2 mt-3 text-[11px]">
+         <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">Pending</span>
+         <span className="px-2 py-0.5 rounded-full bg-blue-100 text-blue-800">Scheduled</span>
+         <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">Completed</span>
+         <span className="px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">Closed</span>
+        </div>
+       </div>
+
+         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-4">
+        <MiniLineChart
+         title="Appointment Load (Next 7 Days)"
+         data={upcomingSevenDayLoad}
+         color="#2563eb"
+         valueSuffix=" appts"
+        />
+        <StatusBarChart
+         title={`Status Mix (${selectedAppointmentDate})`}
+         items={selectedDateStatusItems}
+        />
+         </div>
+
        <div className="space-y-3 max-h-80 overflow-y-auto">
-        {appointments.length ? appointments.map((item) => (
-         <div key={item._id} className="bg-slate-50 rounded-lg p-3 text-sm">
+        <p className="text-sm font-semibold">Appointments for {selectedAppointmentDate}</p>
+        {selectedDateAppointments.length ? [...selectedDateAppointments].sort((a, b) => {
+            if (a.status === "pending" && b.status !== "pending") return -1;
+            if (a.status !== "pending" && b.status === "pending") return 1;
+            return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+          }).map((item) => (
+           <div key={item._id} className={`rounded-lg p-3 text-sm ${item.status === "pending" ? "bg-amber-50 border border-amber-200" : "bg-slate-50"}`}>
           <p><strong>Patient ID:</strong> {item.patientId || item.userId}</p>
           <p><strong>Date:</strong> {item.date} {item.time || ""}</p>
+            {item.preferredDate || item.preferredTime ? <p><strong>Preferred:</strong> {item.preferredDate || "--"} {item.preferredTime || ""}</p> : null}
           <p><strong>Token:</strong> {item.token || "NA"}</p>
           <p><strong>Status:</strong> {item.status}</p>
+            {item.decisionNote ? <p><strong>Decision Note:</strong> {item.decisionNote}</p> : null}
+            {item.status === "pending" ? (
+             <div className="flex gap-2 mt-2">
+              <button className="submit-btn text-xs px-3 py-1" onClick={() => respondToConsultation(item._id, "approve")}>Approve</button>
+              <button className="text-xs px-3 py-1 rounded bg-red-600 text-white" onClick={() => respondToConsultation(item._id, "reject")}>Reject</button>
+             </div>
+            ) : null}
          </div>
-        )) : <p className="text-sm text-gray-500">No consultations scheduled</p>}
+        )) : <p className="text-sm text-gray-500">No consultations on this date</p>}
        </div>
       </section>
      ) : null}
@@ -475,12 +755,38 @@ export default function DoctorDashboard() {
      {activeTab === "profile" ? (
       <section id="profile-panel" role="tabpanel" aria-labelledby="profile-tab" className="bg-white rounded-2xl shadow p-6">
        <h2 className="text-lg font-semibold mb-3">Doctor Profile & Availability</h2>
-       <div className="text-sm space-y-2">
-        <p><strong>Name:</strong> Dr. {user.name}</p>
-        <p><strong>Email:</strong> {user.email}</p>
-        <p><strong>Role:</strong> {user.role}</p>
-        <p><strong>Availability:</strong> Active</p>
-       </div>
+       <form className="space-y-4" onSubmit={saveProfile}>
+        <div className="flex items-center gap-4">
+         <div className="w-16 h-16 rounded-full overflow-hidden bg-slate-200 flex items-center justify-center">
+          {profileForm.avatarDataUrl ? <img src={profileForm.avatarDataUrl} alt="Profile" className="w-full h-full object-cover" /> : <i className="fa-solid fa-user-doctor text-slate-500"></i>}
+         </div>
+         <div>
+          <p className="text-xs text-gray-500 mb-1">Display Picture</p>
+          <input className="form-input" type="file" accept="image/*" onChange={handleProfileAvatarChange} />
+          {user.doctorIdentityFileName ? <p className="text-xs text-slate-500 mt-1">Identity on file: {user.doctorIdentityFileName}</p> : null}
+         </div>
+        </div>
+        <input className="form-input" placeholder="Doctor Name" value={profileForm.name} onChange={(event) => setProfileForm((prev) => ({ ...prev, name: event.target.value }))} required />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+         <input className="form-input" placeholder="Phone" value={profileForm.phone} onChange={(event) => setProfileForm((prev) => ({ ...prev, phone: event.target.value }))} />
+         <input className="form-input" placeholder="City" value={profileForm.city} onChange={(event) => setProfileForm((prev) => ({ ...prev, city: event.target.value }))} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+         <input className="form-input" placeholder="Specialization" value={profileForm.specialization} onChange={(event) => setProfileForm((prev) => ({ ...prev, specialization: event.target.value }))} />
+         <input className="form-input" placeholder="Clinic / Hospital Name" value={profileForm.clinicName} onChange={(event) => setProfileForm((prev) => ({ ...prev, clinicName: event.target.value }))} />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+         <input className="form-input" type="number" min="0" placeholder="Years of Experience" value={profileForm.yearsExperience} onChange={(event) => setProfileForm((prev) => ({ ...prev, yearsExperience: event.target.value }))} />
+         <input className="form-input" placeholder="Medical License Number" value={profileForm.licenseNumber} onChange={(event) => setProfileForm((prev) => ({ ...prev, licenseNumber: event.target.value }))} />
+        </div>
+        <textarea className="form-input" rows="3" placeholder="Professional bio" value={profileForm.bio} onChange={(event) => setProfileForm((prev) => ({ ...prev, bio: event.target.value }))}></textarea>
+        <div className="text-sm space-y-1 text-slate-600">
+         <p><strong>Email:</strong> {user.email}</p>
+         <p><strong>Role:</strong> {user.role}</p>
+         <p><strong>Availability:</strong> Active</p>
+        </div>
+        <button className="submit-btn" type="submit">Save Profile</button>
+       </form>
       </section>
      ) : null}
 
