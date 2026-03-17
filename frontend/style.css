@@ -439,6 +439,13 @@ body {
     background: linear-gradient(135deg, #d8efeb, #edf7f5);
 }
 
+.nearby-doctors-map {
+    height: 360px;
+    border-radius: 0.75rem;
+    overflow: hidden;
+    border: 1px solid #dbeafe;
+}
+
 .brand-accent {
     font-style: italic;
     color: #7ce3d7;

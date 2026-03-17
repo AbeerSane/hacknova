@@ -7,12 +7,14 @@ import BrandLogo from "../components/BrandLogo";
 import CountUp from "../components/CountUp";
 import { MiniLineChart, RingProgressChart } from "../components/RealtimeCharts";
 import UserAvatar from "../components/UserAvatar";
+import NearbyDoctorsMap from "../components/NearbyDoctorsMap";
 
 const sidebarItems = [
  { id: "overview", label: "Dashboard Overview" },
  { id: "vitals", label: "My Health Vitals" },
  { id: "medications", label: "Medication Tracker" },
  { id: "appointments", label: "Appointments" },
+ { id: "nearby", label: "Nearby Doctors Map" },
  { id: "reports", label: "Health Reports" },
  { id: "alerts", label: "Alerts & Notifications" },
  { id: "emergency", label: "Emergency Help" },
@@ -639,6 +641,14 @@ useEffect(() => {
               </div>
              </div>
             </section>
+         ) : null}
+
+         {activeTab === "nearby" ? (
+          <NearbyDoctorsMap
+           doctors={doctors}
+           patientCity={user.city}
+           onRequestConsultation={requestConsultation}
+          />
          ) : null}
 
          {activeTab === "reports" ? (
