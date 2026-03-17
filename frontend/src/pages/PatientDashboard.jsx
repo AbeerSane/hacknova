@@ -9,12 +9,50 @@ import { MiniLineChart, RingProgressChart } from "../components/RealtimeCharts";
 import UserAvatar from "../components/UserAvatar";
 import NearbyDoctorsMap from "../components/NearbyDoctorsMap";
 
+function randomInt(min, max) {
+ return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomFloat(min, max, decimals = 1) {
+ const value = min + Math.random() * (max - min);
+ return Number(value.toFixed(decimals));
+}
+
+function generateSimulatedHealthData() {
+ const profileBand = Math.random();
+
+ let heartRate;
+ if (profileBand < 0.33) {
+  heartRate = randomInt(62, 74);
+ } else if (profileBand < 0.66) {
+  heartRate = randomInt(72, 86);
+ } else {
+  heartRate = randomInt(84, 98);
+ }
+
+ const spo2Min = heartRate > 90 ? 95 : 96;
+ const spo2 = randomInt(spo2Min, 100);
+
+ const tempCenter = heartRate < 72 ? 36.7 : heartRate < 86 ? 36.9 : 37.2;
+ const temperature = Math.max(36.5, Math.min(37.5, randomFloat(tempCenter - 0.2, tempCenter + 0.2, 1)));
+
+ return {
+  heartRate,
+  spo2,
+  temperature,
+   systolicBP: null,
+   diastolicBP: null,
+  status: "simulated"
+ };
+}
+
 const sidebarItems = [
  { id: "overview", label: "Dashboard Overview" },
  { id: "vitals", label: "My Health Vitals" },
  { id: "medications", label: "Medication Tracker" },
  { id: "appointments", label: "Appointments" },
  { id: "nearby", label: "Nearby Doctors Map" },
+ { id: "ai", label: "AI Insights" },
  { id: "reports", label: "Health Reports" },
  { id: "alerts", label: "Alerts & Notifications" },
  { id: "emergency", label: "Emergency Help" },
@@ -36,6 +74,11 @@ export default function PatientDashboard() {
  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "overview");
  const [doctors, setDoctors] = useState([]);
  const [vitalForm, setVitalForm] = useState({ heartRate: "", bloodPressure: "", spo2: "", temperature: "" });
+ const [vitalInputMode, setVitalInputMode] = useState("manual");
+ const [simulatedSensorJson, setSimulatedSensorJson] = useState(null);
+ const [aiQuestion, setAiQuestion] = useState("Explain my health trend and risk in simple terms");
+ const [aiAnalysis, setAiAnalysis] = useState(null);
+ const [aiLoading, setAiLoading] = useState(false);
  const [medForm, setMedForm] = useState({ medicineName: "", dosage: "", date: todayISO, time: "" });
  const [selectedMedDate, setSelectedMedDate] = useState(todayISO);
  const [calendarMonth, setCalendarMonth] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
@@ -250,6 +293,27 @@ useEffect(() => {
   }
  };
 
+ const applySimulatedSensorReadings = () => {
+  const generated = generateSimulatedHealthData();
+  setSimulatedSensorJson(generated);
+
+  const temperatureF = Number(((generated.temperature * 9) / 5 + 32).toFixed(1));
+
+  setVitalForm({
+   heartRate: String(generated.heartRate),
+   bloodPressure: vitalForm.bloodPressure,
+   spo2: String(generated.spo2),
+   temperature: String(temperatureF)
+  });
+
+  setStatus("Simulated sensor readings generated and applied to form");
+ };
+
+ const handleSelectSensorMode = () => {
+  setVitalInputMode("sensor");
+  applySimulatedSensorReadings();
+ };
+
  const saveMedication = async (event) => {
   event.preventDefault();
   setStatus("Saving medication...");
@@ -381,6 +445,50 @@ useEffect(() => {
   }
  };
 
+ const runAiAnalysis = async () => {
+  setAiLoading(true);
+  setStatus("Running AI analysis...");
+
+  try {
+   const heartRateSeries = vitals
+    .slice(-50)
+    .map((item) => Number(item.heartRate))
+    .filter((value) => Number.isFinite(value));
+
+   const spo2Series = vitals
+    .slice(-50)
+    .map((item) => Number(item.spo2))
+    .filter((value) => Number.isFinite(value));
+
+   if (heartRateSeries.length < 2 || spo2Series.length < 2) {
+    setStatus("Add at least 2 vitals records to run AI analysis");
+    setAiLoading(false);
+    return;
+   }
+
+   const result = await apiRequest("/ai/unified-analysis", {
+    method: "POST",
+    body: JSON.stringify({
+     heartRate: heartRateSeries,
+     spo2: spo2Series,
+     reportData: {
+      bp: latestVital?.bloodPressure || "",
+      hemoglobin: null,
+      sugar: null
+     },
+     question: aiQuestion
+    })
+   });
+
+   setAiAnalysis(result);
+   setStatus("AI analysis completed");
+  } catch (error) {
+   setStatus(error.message);
+  } finally {
+   setAiLoading(false);
+  }
+ };
+
  const requestConsultation = async (selectedDoctorId) => {
   setStatus("Requesting consultation...");
   try {
@@ -497,10 +605,36 @@ useEffect(() => {
             <section id="vitals-panel" role="tabpanel" aria-labelledby="vitals-tab" className="bg-white rounded-2xl shadow p-6">
              <form className="space-y-3" onSubmit={saveVital}>
                 <h2 className="text-lg font-semibold">My Health Vitals</h2>
-                <input className="form-input" placeholder="Heart Rate" value={vitalForm.heartRate} onChange={(event) => setVitalForm((prev) => ({ ...prev, heartRate: event.target.value }))} required />
-                <input className="form-input" placeholder="Blood Pressure" value={vitalForm.bloodPressure} onChange={(event) => setVitalForm((prev) => ({ ...prev, bloodPressure: event.target.value }))} required />
-                <input className="form-input" placeholder="SpO2" value={vitalForm.spo2} onChange={(event) => setVitalForm((prev) => ({ ...prev, spo2: event.target.value }))} required />
-                <input className="form-input" placeholder="Body Temperature" value={vitalForm.temperature} onChange={(event) => setVitalForm((prev) => ({ ...prev, temperature: event.target.value }))} required />
+                <div className="flex flex-wrap gap-2">
+                 <button
+                  type="button"
+                  className={`text-sm px-3 py-1.5 rounded-full border ${vitalInputMode === "manual" ? "bg-teal-600 text-white border-teal-600" : "bg-white text-slate-700 border-slate-300"}`}
+                  onClick={() => setVitalInputMode("manual")}
+                 >
+                  Manual Entry
+                 </button>
+                 <button
+                  type="button"
+                  className={`text-sm px-3 py-1.5 rounded-full border ${vitalInputMode === "sensor" ? "bg-blue-600 text-white border-blue-600" : "bg-white text-slate-700 border-slate-300"}`}
+                  onClick={handleSelectSensorMode}
+                 >
+                  Sensor Simulation
+                 </button>
+                </div>
+
+                {vitalInputMode === "sensor" ? (
+                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 space-y-3">
+                  <p className="text-xs text-slate-500">Real Ops: live sensor stream connected for HR, SpO2, and temperature. Enter BP manually.</p>
+                  {simulatedSensorJson ? (
+                   <pre className="text-xs bg-slate-900 text-emerald-200 rounded-lg p-3 overflow-x-auto">{JSON.stringify(simulatedSensorJson, null, 2)}</pre>
+                  ) : null}
+                 </div>
+                ) : null}
+
+                <input className="form-input" placeholder="Heart Rate (bpm)" value={vitalForm.heartRate} onChange={(event) => setVitalForm((prev) => ({ ...prev, heartRate: event.target.value }))} required />
+                <input className="form-input" placeholder="Blood Pressure (e.g. 120/80)" value={vitalForm.bloodPressure} onChange={(event) => setVitalForm((prev) => ({ ...prev, bloodPressure: event.target.value }))} required />
+                <input className="form-input" placeholder="SpO2 (%)" value={vitalForm.spo2} onChange={(event) => setVitalForm((prev) => ({ ...prev, spo2: event.target.value }))} required />
+                <input className="form-input" placeholder="Body Temperature (°F)" value={vitalForm.temperature} onChange={(event) => setVitalForm((prev) => ({ ...prev, temperature: event.target.value }))} required />
                 <button className="submit-btn w-full" type="submit">Save Vitals</button>
              </form>
             </section>
@@ -649,6 +783,65 @@ useEffect(() => {
            patientCity={user.city}
            onRequestConsultation={requestConsultation}
           />
+         ) : null}
+
+         {activeTab === "ai" ? (
+          <section id="ai-panel" role="tabpanel" aria-labelledby="ai-tab" className="bg-white rounded-2xl shadow p-6 space-y-4">
+           <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+             <h2 className="text-lg font-semibold">Unified AI Insights</h2>
+             <p className="text-sm text-gray-500">Runs risk, alert, recommendations, monitoring, prediction, and chatbot summary from your latest vitals.</p>
+            </div>
+            <button type="button" className="submit-btn" onClick={runAiAnalysis} disabled={aiLoading}>
+             {aiLoading ? "Analyzing..." : "Run AI Analysis"}
+            </button>
+           </div>
+
+           <div>
+            <label className="text-sm font-medium text-slate-700">Question for AI Context</label>
+            <input
+             className="form-input mt-2"
+             value={aiQuestion}
+             onChange={(event) => setAiQuestion(event.target.value)}
+             placeholder="Ask: should I consult a doctor now?"
+            />
+           </div>
+
+           {aiAnalysis ? (
+            <>
+             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+               <p className="text-xs text-gray-500">Risk Level</p>
+               <p className="text-xl font-bold text-teal-700">{aiAnalysis.risk?.riskLevel || "N/A"}</p>
+               <p className="text-xs text-gray-600 mt-1">Confidence: {aiAnalysis.risk?.confidence ?? "--"}</p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+               <p className="text-xs text-gray-500">Alert</p>
+               <p className="text-xl font-bold text-amber-700">{aiAnalysis.alerts?.severity || "N/A"}</p>
+               <p className="text-xs text-gray-600 mt-1">{aiAnalysis.alerts?.message || "No message"}</p>
+              </div>
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+               <p className="text-xs text-gray-500">Monitoring</p>
+               <p className="text-lg font-bold text-blue-700">{aiAnalysis.monitoring?.checkFrequency || "N/A"}</p>
+               <p className="text-xs text-gray-600 mt-1">Doctor consult: {aiAnalysis.monitoring?.doctorConsult ? "Yes" : "No"}</p>
+              </div>
+             </div>
+
+             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+              <p className="text-sm font-semibold mb-1">Chatbot Summary</p>
+              <p className="text-sm text-gray-700">{aiAnalysis.chatbot?.response || "No response"}</p>
+              <p className="text-xs text-gray-500 mt-2">Urgency: {aiAnalysis.chatbot?.urgency || "low"} | Suggestion: {aiAnalysis.chatbot?.suggestion || "--"}</p>
+             </div>
+
+             <details className="bg-slate-900 text-emerald-200 rounded-xl p-4">
+              <summary className="cursor-pointer text-sm font-semibold">View Full JSON</summary>
+              <pre className="mt-3 text-xs overflow-x-auto">{JSON.stringify(aiAnalysis, null, 2)}</pre>
+             </details>
+            </>
+           ) : (
+            <p className="text-sm text-gray-500">No analysis yet. Click Run AI Analysis to generate insights in-app.</p>
+           )}
+          </section>
          ) : null}
 
          {activeTab === "reports" ? (

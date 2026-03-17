@@ -15,6 +15,7 @@ const notificationRoutes = require("./routes/notificationRoutes")
 const reportRoutes = require("./routes/reportRoutes")
 const chatbotRoutes = require("./routes/chatbotRoutes")
 const prescriptionRoutes = require("./routes/prescriptionRoutes")
+const aiRoutes = require("./routes/aiRoutes")
 
 const app = express()
 const port = process.env.PORT || 5000
@@ -32,6 +33,7 @@ app.use("/api/notifications",notificationRoutes)
 app.use("/api/reports",reportRoutes)
 app.use("/api/chatbot",chatbotRoutes)
 app.use("/api/prescriptions",prescriptionRoutes)
+app.use("/api/ai",aiRoutes)
 
 app.get("/api/health", (req, res) => {
  res.json({ status: "ok" })
