@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../config";
+import BrandLogo from "../components/BrandLogo";
 
 export default function ContactPage() {
  const [form, setForm] = useState({ name: "", email: "", message: "" });
@@ -26,7 +27,9 @@ export default function ContactPage() {
   <div>
    <nav className="navbar fixed top-0 w-full z-50 shadow-md">
     <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-     <span className="font-bold text-2xl text-gray-800">HealthApp</span>
+         <Link className="contact-brand-link" to="/">
+            <BrandLogo logoClassName="brand-logo-nav" titleClassName="text-gray-800" />
+         </Link>
      <div className="hidden md:flex space-x-6 text-gray-700">
       <Link className="hover:text-teal-500 transition-colors" to="/">Home</Link>
       <Link className="hover:text-teal-500 transition-colors" to="/login">Login</Link>

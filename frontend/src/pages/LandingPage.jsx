@@ -2,6 +2,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { apiRequest } from "../config";
 import CountUp from "../components/CountUp";
+import BrandLogo from "../components/BrandLogo";
+import UserAvatar from "../components/UserAvatar";
 import { useAuth } from "../context/AuthContext";
 
 const features = [
@@ -54,7 +56,9 @@ export default function LandingPage() {
   <div className="landing-canvas">
    <nav className="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm fixed-top app-nav">
     <div className="container-fluid">
-     <Link className="navbar-brand fw-bold" to="/">HealthApp <span className="brand-accent">Care+</span></Link>
+     <Link className="navbar-brand fw-bold brand-link" to="/">
+      <BrandLogo logoClassName="brand-logo-nav" />
+     </Link>
      <ul className="navbar-nav me-auto mb-2 mb-lg-0">
       <li className="nav-item"><a className="nav-link active" href="#hero">Home</a></li>
       <li className="nav-item"><a className="nav-link" href="#features">Features</a></li>
@@ -64,7 +68,11 @@ export default function LandingPage() {
       {session?.user ? (
        <>
         <Link className="landing-nav-profile" to={profilePath} aria-label="Open dashboard profile">
-         <i className="fa-solid fa-user"></i>
+         <UserAvatar
+          image={session.user.avatarDataUrl}
+          name={session.user.name}
+          className="user-avatar-nav"
+         />
          <span>{session.user.name}</span>
         </Link>
         <button className="landing-nav-chip landing-nav-logout" type="button" onClick={logout}>

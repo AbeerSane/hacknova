@@ -3,8 +3,10 @@ import jsPDF from "jspdf";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { apiRequest } from "../config";
+import BrandLogo from "../components/BrandLogo";
 import CountUp from "../components/CountUp";
 import { MiniLineChart, StatusBarChart } from "../components/RealtimeCharts";
+import UserAvatar from "../components/UserAvatar";
 
 const sections = [
  { id: "overview", label: "Dashboard Overview" },
@@ -396,8 +398,7 @@ export default function DoctorDashboard() {
     <header className="bg-white rounded-2xl shadow p-4 mb-6 flex items-center justify-between dashboard-topbar">
       <div className="dashboard-header-brand">
        <Link to="/" className="dashboard-brand-link">
-        <span className="dashboard-brand-mark">H+</span>
-        <span>HealthApp Care+</span>
+        <BrandLogo logoClassName="brand-logo-dashboard" />
        </Link>
       </div>
       <div className="dashboard-header-center">
@@ -411,7 +412,12 @@ export default function DoctorDashboard() {
        aria-label="Open doctor profile"
        onClick={() => setActiveTab("profile")}
       >
-      <i className="fa-solid fa-user-doctor"></i>
+      <UserAvatar
+       image={user.avatarDataUrl}
+       name={user.name}
+       className="user-avatar-dashboard"
+       fallbackIconClassName="fa-solid fa-user-doctor"
+      />
       </button>
      <button className="submit-btn" onClick={logout}>Logout</button>
     </div>
