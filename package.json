@@ -6,6 +6,7 @@
   "scripts": {
     "backend": "node backend/server.js",
     "frontend": "vite frontend",
+    "build": "npm run frontend:build",
     "frontend:build": "vite build frontend",
     "frontend:preview": "vite preview frontend",
     "dev": "concurrently \"npm run backend\" \"npm run frontend\"",
