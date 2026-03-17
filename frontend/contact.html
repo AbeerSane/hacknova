@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <!-- Metadata -->
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contact Us - HealthApp</title>
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Google Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- Navbar -->
+    <nav class="navbar fixed top-0 w-full z-50 shadow-md">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <a class="font-bold text-2xl text-gray-800" href="#">HealthApp</a>
+            <div class="hidden md:flex space-x-6 text-gray-700">
+                <a class="hover:text-teal-500 transition-colors" href="./index.html">Home 🏠</a>
+            </div>
+            <button class="md:hidden text-gray-700 text-2xl">
+                <i class="fas fa-bars"></i>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Contact Form Section -->
+    <section class="min-h-screen pt-24 contact-section flex items-center justify-center">
+        <div class="container mx-auto px-4 text-center">
+            <h1 class="text-5xl md:text-6xl font-semibold leading-tight mb-4 text-gray-800">
+                Get in Touch
+            </h1>
+            <p class="text-lg md:text-xl max-w-2xl mx-auto text-gray-700 mb-8">
+                We'd love to hear from you. Send us a message and we'll get back to you as soon as possible.
+            </p>
+            
+            <form class="max-w-xl mx-auto bg-white p-8 rounded-lg shadow-lg space-y-6">
+                <input type="text" class="form-input" placeholder="Full Name" required>
+                <input type="email" class="form-input" placeholder="Email Address" required>
+                <textarea class="form-input resize-none" rows="5" placeholder="Your Message" required></textarea>
+                <button type="submit" class="submit-btn w-full">Send Message</button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-800 text-gray-300 py-8 px-8">
+        <div class="max-w-7xl mx-auto text-center text-sm">
+            <span>© 2025 HealthApp. All Rights Reserved.</span>
+        </div>
+    </footer>
+    
+</body>
+</html>
